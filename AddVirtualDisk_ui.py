@@ -1,24 +1,28 @@
 """
-AddVirtualDisk - PySide6 GUI
-在"此电脑"中添加自定义文件夹图标
+ThisPC‑Namespace‑Linker - PySide6 GUI
+在 Windows 资源管理器中添加自定义文件夹图标
+支持此电脑 / 桌面 / 网络位置，支持排序和副标题
+支持中/英文语言切换
 """
 
 import sys, os
-from typing import Optional, Dict, List
+from typing import Optional, Dict, Any
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFormLayout, QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QLabel, QMessageBox, QDialog, QLineEdit, QFileDialog,
-    QStatusBar, QAbstractItemView, QStyleFactory,
+    QStatusBar, QAbstractItemView, QStyleFactory, QComboBox, QSpinBox,
 )
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QFont, QIcon
+from PySide6.QtGui import QFont, QIcon, QDesktopServices
+from PySide6.QtCore import QUrl
 
 from AddVirtualDisk import (
     add_virtual_folder, remove_virtual_folder,
-    list_virtual_folders, refresh_explorer,
+    list_virtual_folders, refresh_explorer, LOCATIONS, VERSION,
 )
+from i18n import get_text, get_location_name, DEFAULT_LANG
 
 
 # ============================================================
@@ -26,12 +30,14 @@ from AddVirtualDisk import (
 # ============================================================
 
 class AddEditDialog(QDialog):
-    def __init__(self, parent=None, edit_data: Optional[Dict[str, str]] = None):
+    def __init__(self, parent=None, edit_data: Optional[Dict[str, Any]] = None, lang: str = DEFAULT_LANG):
         super().__init__(parent)
         self.edit_data = edit_data
         self.is_edit = edit_data is not None
-        self.setWindowTitle("编辑自定义文件夹" if self.is_edit else "添加自定义文件夹")
-        self.setMinimumWidth(540)
+        self.lang = lang
+        self.result_data: Optional[Dict[str, Any]] = None
+        self.setWindowTitle(get_text(lang, "edit_title") if self.is_edit else get_text(lang, "add_title"))
+        self.setMinimumWidth(580)
         self.setModal(True)
         self._build_ui()
 
@@ -44,51 +50,74 @@ class AddEditDialog(QDialog):
         form.setSpacing(8)
         form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
+        T = lambda k, **kw: get_text(self.lang, k, **kw)
+
+        # 显示名称
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("例如: 我的文档")
+        self.name_edit.setPlaceholderText(T("placeholder_name"))
         self.name_edit.setText(self.edit_data.get("name", "") if self.is_edit else "")
-        form.addRow("显示名称 *:", self.name_edit)
+        form.addRow(T("label_name"), self.name_edit)
+
+        # 副标题
+        self.subtitle_edit = QLineEdit()
+        self.subtitle_edit.setPlaceholderText(T("placeholder_subtitle"))
+        self.subtitle_edit.setText(self.edit_data.get("subtitle", "") if self.is_edit else "")
+        form.addRow(T("label_subtitle"), self.subtitle_edit)
 
         # 目标路径 + 浏览按钮
         path_widget = QWidget()
         path_layout = QHBoxLayout(path_widget)
         path_layout.setContentsMargins(0, 0, 0, 0)
         self.path_edit = QLineEdit()
-        self.path_edit.setPlaceholderText("例如: D:\\MyFolder")
+        self.path_edit.setPlaceholderText(T("placeholder_target"))
         self.path_edit.setText(self.edit_data.get("target", "") if self.is_edit else "")
-        browse_path_btn = QPushButton("浏览...")
+        browse_path_btn = QPushButton(T("browse"))
         browse_path_btn.clicked.connect(lambda: self._browse_folder())
         path_layout.addWidget(self.path_edit)
         path_layout.addWidget(browse_path_btn)
-        form.addRow("目标路径 *:", path_widget)
+        form.addRow(T("label_target"), path_widget)
 
+        # 备注
         self.comment_edit = QLineEdit()
-        self.comment_edit.setPlaceholderText("鼠标悬停时显示的提示信息")
+        self.comment_edit.setPlaceholderText(T("placeholder_comment"))
         self.comment_edit.setText(self.edit_data.get("comment", "") if self.is_edit else "")
-        form.addRow("备注:", self.comment_edit)
+        form.addRow(T("label_comment"), self.comment_edit)
 
         # 图标路径 + 浏览按钮
         icon_widget = QWidget()
         icon_layout = QHBoxLayout(icon_widget)
         icon_layout.setContentsMargins(0, 0, 0, 0)
         self.icon_edit = QLineEdit()
-        self.icon_edit.setPlaceholderText("留空则使用默认文件夹图标")
+        self.icon_edit.setPlaceholderText(T("placeholder_icon"))
         self.icon_edit.setText(self.edit_data.get("icon", "") if self.is_edit else "")
-        browse_icon_btn = QPushButton("浏览...")
+        browse_icon_btn = QPushButton(T("browse"))
         browse_icon_btn.clicked.connect(lambda: self._browse_icon())
         icon_layout.addWidget(self.icon_edit)
         icon_layout.addWidget(browse_icon_btn)
-        form.addRow("图标路径:", icon_widget)
+        form.addRow(T("label_icon"), icon_widget)
+
+        # 目标位置
+        self.location_combo = QComboBox()
+        loc_names = list(LOCATIONS.keys())
+        self.location_combo.addItems(loc_names)
+        if self.is_edit:
+            loc = self.edit_data.get("location", "此电脑")
+            idx = self.location_combo.findText(loc)
+            if idx >= 0:
+                self.location_combo.setCurrentIndex(idx)
+        form.addRow(T("label_location"), self.location_combo)
+
+        # 排序索引
+        self.sort_spin = QSpinBox()
+        self.sort_spin.setRange(0, 999)
+        self.sort_spin.setValue(self.edit_data.get("sort_order", 60) if self.is_edit else 60)
+        self.sort_spin.setToolTip(T("tooltip_sort"))
+        form.addRow(T("label_sort"), self.sort_spin)
 
         layout.addLayout(form)
 
         # 帮助提示
-        help_label = QLabel(
-            "💡 图标路径可以是:\n"
-            "  · .ico 文件路径，如 C:\\MyIcon.ico\n"
-            "  · DLL/EXE 资源索引，如 C:\\Windows\\System32\\imageres.dll,-3\n"
-            "  · 留空则用默认文件夹图标"
-        )
+        help_label = QLabel(T("help_text"))
         help_label.setStyleSheet("color: #888; font-size: 12px; padding: 8px;")
         help_label.setWordWrap(True)
         layout.addWidget(help_label)
@@ -96,40 +125,45 @@ class AddEditDialog(QDialog):
         # 按钮
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        confirm_btn = QPushButton("确定")
+        confirm_btn = QPushButton(T("confirm"))
         confirm_btn.setDefault(True)
         confirm_btn.clicked.connect(self._confirm)
-        cancel_btn = QPushButton("取消")
+        cancel_btn = QPushButton(T("cancel"))
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(confirm_btn)
         btn_layout.addWidget(cancel_btn)
         layout.addLayout(btn_layout)
 
     def _browse_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "选择目标文件夹")
+        folder = QFileDialog.getExistingDirectory(self, "选择目标文件夹" if self.lang == "zh" else "Select target folder")
         if folder:
             self.path_edit.setText(folder)
 
     def _browse_icon(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择图标文件",
+            self,
+            "选择图标文件" if self.lang == "zh" else "Select icon file",
             "",
-            "图标/程序 (*.ico *.dll *.exe);;所有文件 (*.*)"
+            "Icon/Program (*.ico *.dll *.exe);;All Files (*.*)"
         )
         if file_path:
             self.icon_edit.setText(file_path)
 
     def _confirm(self):
+        T = lambda k, **kw: get_text(self.lang, k, **kw)
         name = self.name_edit.text().strip()
         target = self.path_edit.text().strip()
         comment = self.comment_edit.text().strip()
         icon = self.icon_edit.text().strip()
+        subtitle = self.subtitle_edit.text().strip()
+        location = self.location_combo.currentText()
+        sort_order = self.sort_spin.value()
 
         if not name:
-            QMessageBox.warning(self, "错误", "显示名称不能为空")
+            QMessageBox.warning(self, T("op_failed"), T("warn_empty_name"))
             return
         if not target:
-            QMessageBox.warning(self, "错误", "目标路径不能为空")
+            QMessageBox.warning(self, T("op_failed"), T("warn_empty_target"))
             return
 
         self.result_data = {
@@ -137,8 +171,100 @@ class AddEditDialog(QDialog):
             "target": target,
             "comment": comment,
             "icon": icon,
+            "location": location,
+            "sort_order": sort_order,
+            "subtitle": subtitle,
         }
         self.accept()
+
+
+# ============================================================
+# 关于对话框
+# ============================================================
+
+class AboutDialog(QDialog):
+    def __init__(self, parent=None, lang: str = DEFAULT_LANG):
+        super().__init__(parent)
+        self.lang = lang
+        self.setWindowTitle(get_text(lang, "about_title"))
+        self.setFixedSize(420, 380)
+        self._build_ui()
+
+    def _build_ui(self):
+        T = lambda k, **kw: get_text(self.lang, k, **kw)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        # 软件名称
+        name_label = QLabel(T("app_name"))
+        name_font = QFont("Microsoft YaHei", 18, QFont.Bold)
+        name_label.setFont(name_font)
+        name_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(name_label)
+
+        # 版本号
+        ver_label = QLabel(f"Version: {VERSION}")
+        ver_label.setAlignment(Qt.AlignCenter)
+        ver_label.setStyleSheet("color: #666; font-size: 13px;")
+        layout.addWidget(ver_label)
+
+        # 分隔
+        line = QLabel()
+        line.setFixedHeight(1)
+        line.setStyleSheet("background: #ddd;")
+        layout.addWidget(line)
+
+        # 好好学习，天天向上
+        motto = QLabel(T("motto"))
+        motto.setAlignment(Qt.AlignCenter)
+        motto_font = QFont("Microsoft YaHei", 12)
+        motto.setFont(motto_font)
+        motto.setStyleSheet("color: #555; padding: 6px;")
+        layout.addWidget(motto)
+
+        # 分隔
+        line2 = QLabel()
+        line2.setFixedHeight(1)
+        line2.setStyleSheet("background: #ddd;")
+        layout.addWidget(line2)
+
+        # 开发者信息
+        info = QLabel(T("developer"))
+        info.setAlignment(Qt.AlignCenter)
+        info.setStyleSheet("color: #444; font-size: 12px; line-height: 1.6;")
+        layout.addWidget(info)
+
+        # 分隔
+        line3 = QLabel()
+        line3.setFixedHeight(1)
+        line3.setStyleSheet("background: #ddd;")
+        layout.addWidget(line3)
+
+        # 隐私声明 + 超链接博客
+        privacy = QLabel(
+            T("privacy") + "\n\n"
+            '<a href="https://xuer.space" style="color: #0078d4; text-decoration: none;">'
+            + T("blog") + "</a>"
+        )
+        privacy.setAlignment(Qt.AlignCenter)
+        privacy.setTextFormat(Qt.RichText)     # <-- 关键！修复超链接显示为代码的问题
+        privacy.setOpenExternalLinks(True)
+        privacy.setStyleSheet("color: #666; font-size: 12px;")
+        privacy.setWordWrap(True)
+        layout.addWidget(privacy)
+
+        layout.addStretch()
+
+        # 确定按钮
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        ok_btn = QPushButton(T("confirm"))
+        ok_btn.setFixedWidth(100)
+        ok_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
 
 
 # ============================================================
@@ -148,10 +274,15 @@ class AddEditDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("AddVirtualDisk - 此电脑自定义文件夹管理")
-        self.setMinimumSize(900, 620)
+        self.current_lang = DEFAULT_LANG  # 当前语言
+        self.setWindowTitle(get_text(self.current_lang, "window_title"))
+        self.setMinimumSize(1050, 680)
         self._build_ui()
         self.refresh_list()
+
+    # ---- 语言工具 ----
+    def T(self, key: str, **kwargs) -> str:
+        return get_text(self.current_lang, key, **kwargs)
 
     def _build_ui(self):
         central = QWidget()
@@ -161,58 +292,72 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         # 标题
-        title = QLabel("📁 \"此电脑\" - 自定义文件夹管理")
+        self.title_label = QLabel("📁 " + self.T("window_title"))
         title_font = QFont("Microsoft YaHei", 14, QFont.Bold)
-        title.setFont(title_font)
-        layout.addWidget(title)
+        self.title_label.setFont(title_font)
+        layout.addWidget(self.title_label)
 
         # 按钮栏
         btn_bar = QHBoxLayout()
         btn_bar.setSpacing(6)
 
-        add_btn = QPushButton("＋ 添加")
-        add_btn.clicked.connect(self.show_add_dialog)
-        btn_bar.addWidget(add_btn)
+        self.add_btn = QPushButton(self.T("add"))
+        self.add_btn.clicked.connect(self.show_add_dialog)
+        btn_bar.addWidget(self.add_btn)
 
-        edit_btn = QPushButton("✎ 编辑")
-        edit_btn.clicked.connect(self.edit_selected)
-        btn_bar.addWidget(edit_btn)
+        self.edit_btn = QPushButton(self.T("edit"))
+        self.edit_btn.clicked.connect(self.edit_selected)
+        btn_bar.addWidget(self.edit_btn)
 
-        delete_btn = QPushButton("✕ 删除")
-        delete_btn.clicked.connect(self.delete_selected)
-        btn_bar.addWidget(delete_btn)
+        self.delete_btn = QPushButton(self.T("delete"))
+        self.delete_btn.clicked.connect(self.delete_selected)
+        btn_bar.addWidget(self.delete_btn)
 
-        refresh_btn = QPushButton("↻ 刷新")
-        refresh_btn.clicked.connect(self.refresh_list)
-        btn_bar.addWidget(refresh_btn)
+        self.refresh_btn = QPushButton(self.T("refresh"))
+        self.refresh_btn.clicked.connect(self.refresh_list)
+        btn_bar.addWidget(self.refresh_btn)
 
         btn_bar.addStretch()
 
-        refresh_shell_btn = QPushButton("⟳ 刷新资源管理器")
-        refresh_shell_btn.clicked.connect(self._refresh_shell)
-        btn_bar.addWidget(refresh_shell_btn)
+        self.refresh_shell_btn = QPushButton(self.T("refresh_shell"))
+        self.refresh_shell_btn.clicked.connect(self._refresh_shell)
+        btn_bar.addWidget(self.refresh_shell_btn)
+
+        self.about_btn = QPushButton(self.T("about"))
+        self.about_btn.clicked.connect(self.show_about_dialog)
+        btn_bar.addWidget(self.about_btn)
+
+        # ---- 语言切换 ----
+        btn_bar.addSpacing(12)
+        lang_label = QLabel(self.T("language"))
+        lang_label.setStyleSheet("font-size: 12px; color: #666;")
+        btn_bar.addWidget(lang_label)
+        self.lang_combo = QComboBox()
+        self.lang_combo.setFixedWidth(80)
+        self.lang_combo.addItem("中文", "zh")
+        self.lang_combo.addItem("English", "en")
+        idx = self.lang_combo.findData(self.current_lang)
+        if idx >= 0:
+            self.lang_combo.setCurrentIndex(idx)
+        self.lang_combo.currentIndexChanged.connect(self._on_lang_changed)
+        btn_bar.addWidget(self.lang_combo)
 
         layout.addLayout(btn_bar)
 
-        # 表格
+        # 表格 - 7列
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["显示名称", "GUID", "目标路径", "备注", "图标路径"])
+        self.table.setColumnCount(7)
+        self._set_table_headers()
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Interactive)
-        self.table.setColumnWidth(0, 150)
-        self.table.setColumnWidth(1, 250)
-        self.table.setColumnWidth(3, 200)
-        self.table.setColumnWidth(4, 200)
+        self.table.setColumnWidth(2, 260)  # GUID
+        self.table.setColumnWidth(3, 200)  # 目标路径
+        self.table.setColumnWidth(4, 70)   # 目标位置
+        self.table.setColumnWidth(5, 50)   # 排序
         self.table.doubleClicked.connect(self.edit_selected)
 
         layout.addWidget(self.table)
@@ -220,7 +365,35 @@ class MainWindow(QMainWindow):
         # 状态栏
         self.status = QStatusBar()
         self.setStatusBar(self.status)
-        self.status.showMessage("就绪")
+        self.status.showMessage(self.T("status_ready"))
+
+    def _set_table_headers(self):
+        self.table.setHorizontalHeaderLabels([
+            self.T("col_name"), self.T("col_subtitle"), self.T("col_guid"),
+            self.T("col_target"), self.T("col_location"),
+            self.T("col_sort"), self.T("col_comment"),
+        ])
+
+    def _on_lang_changed(self, index: int):
+        self.current_lang = self.lang_combo.itemData(index)
+        self._retranslate()
+
+    def _retranslate(self):
+        """切换语言时刷新所有文字"""
+        self.setWindowTitle(self.T("window_title"))
+        self.title_label.setText("📁 " + self.T("window_title"))
+        self.add_btn.setText(self.T("add"))
+        self.edit_btn.setText(self.T("edit"))
+        self.delete_btn.setText(self.T("delete"))
+        self.refresh_btn.setText(self.T("refresh"))
+        self.refresh_shell_btn.setText(self.T("refresh_shell"))
+        self.about_btn.setText(self.T("about"))
+        self.lang_combo.parent().findChildren(QLabel)[-1].setText(self.T("language"))
+        self._set_table_headers()
+        self.status.showMessage(self.T("status_ready"))
+        self.refresh_list()
+
+    # ---- 数据操作 ----
 
     def refresh_list(self):
         self.table.setRowCount(0)
@@ -229,55 +402,98 @@ class MainWindow(QMainWindow):
             self.table.setRowCount(len(folders))
             for row, f in enumerate(folders):
                 self.table.setItem(row, 0, QTableWidgetItem(f["name"]))
-                self.table.setItem(row, 1, QTableWidgetItem(f["guid"]))
-                self.table.setItem(row, 2, QTableWidgetItem(f["target"]))
-                self.table.setItem(row, 3, QTableWidgetItem(f["comment"]))
-                self.table.setItem(row, 4, QTableWidgetItem(f["icon"]))
-            self.status.showMessage(f"共 {len(folders)} 个自定义项")
+                self.table.setItem(row, 1, QTableWidgetItem(f["subtitle"]))
+                self.table.setItem(row, 2, QTableWidgetItem(f["guid"]))
+                self.table.setItem(row, 3, QTableWidgetItem(f["target"]))
+                # 位置显示用当前语言翻译，UserRole 存原始值
+                loc_name = get_location_name(self.current_lang, f["location"])
+                loc_item = QTableWidgetItem(loc_name)
+                loc_item.setData(Qt.UserRole, f["location"])  # 存原始中文名
+                self.table.setItem(row, 4, loc_item)
+                self.table.setItem(row, 5, QTableWidgetItem(str(f["sort_order"])))
+                self.table.setItem(row, 6, QTableWidgetItem(f["comment"]))
+                self.table.item(row, 0).setData(Qt.UserRole, f.get("icon", ""))
+
+            total = len(folders)
+            count_by_loc = {}
+            for f in folders:
+                loc = f["location"]
+                count_by_loc[loc] = count_by_loc.get(loc, 0) + 1
+            loc_str = " | ".join(
+                f"{get_location_name(self.current_lang, k)}: {v}"
+                for k, v in count_by_loc.items()
+            )
+            self.status.showMessage(self.T("status_count", total=total, loc_str=loc_str))
         except Exception as e:
-            self.status.showMessage(f"读取失败: {e}")
+            self.status.showMessage(self.T("status_read_error", e=str(e)))
 
     def _refresh_shell(self):
         refresh_explorer()
-        self.status.showMessage("已刷新 (可能需要手动 F5)")
+        self.status.showMessage(self.T("status_refreshed"))
+
+    def show_about_dialog(self):
+        dlg = AboutDialog(self, self.current_lang)
+        dlg.exec()
 
     def _get_selected_row(self) -> int:
         rows = self.table.selectionModel().selectedRows()
         if not rows:
-            QMessageBox.warning(self, "提示", "请先选中一个项目")
+            QMessageBox.warning(self, self.T("op_failed"), self.T("select_hint"))
             return -1
         return rows[0].row()
 
-    def _get_row_data(self, row: int) -> Dict[str, str]:
+    def _get_row_data(self, row: int) -> Dict[str, Any]:
+        icon = ""
+        item0 = self.table.item(row, 0)
+        if item0:
+            icon = item0.data(Qt.UserRole) or ""
+        loc_item = self.table.item(row, 4)
+        original_loc = loc_item.data(Qt.UserRole) if loc_item else "此电脑"
         return {
             "name": self.table.item(row, 0).text() if self.table.item(row, 0) else "",
-            "guid": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
-            "target": self.table.item(row, 2).text() if self.table.item(row, 2) else "",
-            "comment": self.table.item(row, 3).text() if self.table.item(row, 3) else "",
-            "icon": self.table.item(row, 4).text() if self.table.item(row, 4) else "",
+            "subtitle": self.table.item(row, 1).text() if self.table.item(row, 1) else "",
+            "guid": self.table.item(row, 2).text() if self.table.item(row, 2) else "",
+            "target": self.table.item(row, 3).text() if self.table.item(row, 3) else "",
+            "location": original_loc or "此电脑",
+            "sort_order": int(self.table.item(row, 5).text()) if self.table.item(row, 5) else 60,
+            "comment": self.table.item(row, 6).text() if self.table.item(row, 6) else "",
+            "icon": icon,
         }
+
 
     # --- 操作 ---
 
-    def show_add_dialog(self, edit_data: Dict[str, str] = None):
-        dlg = AddEditDialog(self, edit_data)
+    def show_add_dialog(self, edit_data: Dict[str, Any] = None):
+        dlg = AddEditDialog(self, edit_data, self.current_lang)
         if dlg.exec() == QDialog.Accepted:
             data = dlg.result_data
             try:
                 is_edit = edit_data is not None
                 if is_edit:
                     remove_virtual_folder(edit_data["guid"])
-                    add_virtual_folder(data["name"], data["target"],
-                                       data["comment"], data["icon"], edit_data["guid"])
-                    self.status.showMessage(f"✅ 已更新: {data['name']}")
+                    add_virtual_folder(
+                        data["name"], data["target"],
+                        comment=data["comment"], icon_path=data["icon"],
+                        guid=edit_data["guid"],
+                        location=data["location"],
+                        sort_order=data["sort_order"],
+                        subtitle=data["subtitle"],
+                    )
+                    self.status.showMessage(self.T("status_updated", name=data["name"]))
                 else:
-                    guid = add_virtual_folder(data["name"], data["target"],
-                                              data["comment"], data["icon"])
-                    self.status.showMessage(f"✅ 已添加: {data['name']}  GUID: {guid}")
+                    guid = add_virtual_folder(
+                        data["name"], data["target"],
+                        comment=data["comment"], icon_path=data["icon"],
+                        location=data["location"],
+                        sort_order=data["sort_order"],
+                        subtitle=data["subtitle"],
+                    )
+                    loc_display = get_location_name(self.current_lang, data["location"])
+                    self.status.showMessage(self.T("status_added", name=data["name"], location=loc_display, guid=guid))
                 refresh_explorer()
                 self.refresh_list()
             except Exception as e:
-                QMessageBox.critical(self, "操作失败", str(e))
+                QMessageBox.critical(self, self.T("op_failed"), str(e))
 
     def edit_selected(self):
         row = self._get_selected_row()
@@ -286,13 +502,15 @@ class MainWindow(QMainWindow):
         data = self._get_row_data(row)
         self.show_add_dialog(data)
 
+
     def delete_selected(self):
         row = self._get_selected_row()
         if row < 0:
             return
         data = self._get_row_data(row)
         reply = QMessageBox.question(
-            self, "确认", f"删除「{data['name']}」?",
+            self, self.T("op_failed"),
+            self.T("delete_confirm", name=data["name"]),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if reply != QMessageBox.Yes:
@@ -301,9 +519,9 @@ class MainWindow(QMainWindow):
             remove_virtual_folder(data["guid"])
             refresh_explorer()
             self.refresh_list()
-            self.status.showMessage(f"🗑️ 已删除: {data['name']}")
+            self.status.showMessage(self.T("status_deleted", name=data["name"]))
         except Exception as e:
-            QMessageBox.critical(self, "删除失败", str(e))
+            QMessageBox.critical(self, self.T("delete_failed"), str(e))
 
 
 # ============================================================
@@ -312,7 +530,6 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    # 使用 Fusion 风格，在现代 Windows 上更干净
     app.setStyle(QStyleFactory.create("Fusion"))
 
     # 全局样式表
@@ -368,6 +585,24 @@ def main():
             background: white;
         }
         QLineEdit:focus {
+            border-color: #0078d4;
+        }
+        QComboBox {
+            padding: 5px 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            background: white;
+        }
+        QComboBox:focus {
+            border-color: #0078d4;
+        }
+        QSpinBox {
+            padding: 5px 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            background: white;
+        }
+        QSpinBox:focus {
             border-color: #0078d4;
         }
         QStatusBar {

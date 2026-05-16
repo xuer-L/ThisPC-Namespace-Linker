@@ -1,15 +1,27 @@
 """
-AddVirtualDisk - 在"此电脑"中添加自定义文件夹图标
-通过注册表 HKCU 操作实现
+ThisPC‑Namespace‑Linker - 在 Windows 资源管理器中添加自定义文件夹图标
+支持此电脑 / 桌面 / 网络位置，支持排序和副标题
 """
 
 import sys, os, uuid, winreg, ctypes
-from typing import Optional, Dict, List
+
+from typing import Optional, Dict, List, Any
+
+# ============ 版本信息 ============
+__version__ = "1.0.0"
+VERSION = __version__
+
 
 # ============ 路径常量 ============
 KEY_CLSID     = r"Software\Classes\CLSID"
-KEY_NAMESPACE = r"Software\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace"
 SHELLFOLDER_CLSID = "{0E5AAE11-A475-4c5b-AB00-C66DE400274E}"
+
+# 可添加的位置
+LOCATIONS: Dict[str, str] = {
+    "此电脑": r"Software\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace",
+    "桌面":   r"Software\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace",
+    "网络":   r"Software\Microsoft\Windows\CurrentVersion\Explorer\Network\NameSpace",
+}
 
 def generate_guid() -> str:
     return "{" + str(uuid.uuid4()).upper() + "}"
@@ -58,73 +70,112 @@ def add_virtual_folder(
     target_path: str,
     comment: str = "",
     icon_path: str = "",
-    guid: Optional[str] = None
+    guid: Optional[str] = None,
+    location: str = "此电脑",
+    sort_order: int = 60,
+    subtitle: str = "",
 ) -> str:
     """
-    在"此电脑"中添加一个自定义文件夹图标。
-    返回使用的 GUID。
+    在指定位置中添加一个自定义文件夹图标。
+
+    Parameters:
+        display_name: 显示名称
+        target_path: 目标文件夹路径
+        comment: 鼠标悬停提示
+        icon_path: 图标路径，留空用默认
+        guid: 指定 GUID，留空自动生成
+        location: 目标位置（此电脑/桌面/网络）
+        sort_order: 排序索引，越小越靠前
+        subtitle: 副标题（显示在名称下方的灰体字）
     """
     if not guid:
         guid = generate_guid()
 
     # === 构建注册表路径 ===
-    base  = f"{KEY_CLSID}\\{guid}"
-    ip    = f"{base}\\Instance"
-    ipb   = f"{ip}\\InitPropertyBag"
-    di    = f"{base}\\DefaultIcon"
-    ips   = f"{base}\\InProcServer32"
-    sf    = f"{base}\\ShellFolder"
-    ns    = f"{KEY_NAMESPACE}\\{guid}"
+    ns_path  = LOCATIONS.get(location, LOCATIONS["此电脑"])
+    base     = f"{KEY_CLSID}\\{guid}"
+    ip       = f"{base}\\Instance"
+    ipb      = f"{ip}\\InitPropertyBag"
+    di       = f"{base}\\DefaultIcon"
+    ips      = f"{base}\\InProcServer32"
+    sf       = f"{base}\\ShellFolder"
+    ns       = f"{ns_path}\\{guid}"
 
     # 1. CLSID 主键
     create_key(KEY_CLSID, guid)
     set_sz(base, "", display_name)
     set_sz(base, "DefaultValue", display_name)
 
-    # 2. InfoTip（备注）
+    # 2. 排序索引
+    set_dword(base, "SortOrderIndex", sort_order)
+
+    # 3. 副标题（灰体字）
+    if subtitle:
+        set_sz(base, "TileInfo", "prop:System.ItemAuthors")
+        set_sz(base, "System.ItemAuthors", subtitle)
+    else:
+        # 清除已有的副标题设置（如果之前有的话）
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, base, 0, winreg.KEY_WRITE) as k:
+                try: winreg.DeleteValue(k, "TileInfo")
+                except: pass
+                try: winreg.DeleteValue(k, "System.ItemAuthors")
+                except: pass
+        except: pass
+
+    # 4. InfoTip（鼠标悬停提示）
     if comment:
         set_sz(base, "InfoTip", comment)
+    else:
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, base, 0, winreg.KEY_WRITE) as k:
+                try: winreg.DeleteValue(k, "InfoTip")
+                except: pass
+        except: pass
 
-    # 3. DefaultIcon
+    # 5. DefaultIcon
     create_key(base, "DefaultIcon")
     if icon_path:
         set_sz(di, "", icon_path)
     else:
         set_expand_sz(di, "", r"%systemroot%\system32\imageres.dll,-3")
 
-    # 4. InProcServer32
+    # 6. InProcServer32
     create_key(base, "InProcServer32")
     set_expand_sz(ips, "", r"%systemroot%\system32\shell32.dll")
     set_sz(ips, "ThreadingModel", "Both")
 
-    # 5. Instance
+    # 7. Instance
     create_key(base, "Instance")
     set_sz(ip, "", "")
     set_sz(ip, "CLSID", SHELLFOLDER_CLSID)
 
-    # 6. InitPropertyBag
+    # 8. InitPropertyBag
     create_key(ip, "InitPropertyBag")
     set_sz(ipb, "TargetFolderPath", target_path)
     set_dword(ipb, "Attributes", 0x00000011)
 
-    # 7. ShellFolder
+    # 9. ShellFolder
     create_key(base, "ShellFolder")
     set_dword(sf, "Attributes", 0x00000011)
     set_dword(sf, "FolderValueFlags", 0x00000000)
 
-    # 8. 添加到 NameSpace
-    create_key(KEY_NAMESPACE, guid)
+    # 10. 添加到指定位置的 NameSpace
+    create_key(ns_path, guid)
     set_sz(ns, "", display_name)
 
     return guid
 
 
 def remove_virtual_folder(guid: str) -> bool:
-    """从"此电脑"中移除一个虚拟文件夹"""
-    try:
-        _delete_key_recursive(f"{KEY_NAMESPACE}\\{guid}")
-    except Exception:
-        pass
+    """从所有位置中移除一个虚拟文件夹（包括 CLSID 注册）"""
+    # 从所有 NameSpace 位置移除
+    for ns_path in LOCATIONS.values():
+        try:
+            _delete_key_recursive(f"{ns_path}\\{guid}")
+        except Exception:
+            pass
+    # 移除 CLSID 主键
     try:
         _delete_key_recursive(f"{KEY_CLSID}\\{guid}")
         return True
@@ -132,40 +183,58 @@ def remove_virtual_folder(guid: str) -> bool:
         return False
 
 
-def list_virtual_folders() -> List[Dict[str, str]]:
-    """列出当前"此电脑"中的所有自定义项"""
+def list_virtual_folders() -> List[Dict[str, Any]]:
+    """列出所有位置中的自定义项"""
     folders = []
-    try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, KEY_NAMESPACE, 0, winreg.KEY_READ) as ns_key:
-            i = 0
-            while True:
-                try:
-                    guid = winreg.EnumKey(ns_key, i)
-                    folders.append({"guid": guid, "name": "", "target": "", "comment": "", "icon": ""})
-                    i += 1
-                except OSError:
-                    break
-    except FileNotFoundError:
-        pass
+    seen_guids = set()
 
+    # 扫描所有位置
+    for location_name, ns_path in LOCATIONS.items():
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, ns_path, 0, winreg.KEY_READ) as ns_key:
+                i = 0
+                while True:
+                    try:
+                        guid = winreg.EnumKey(ns_key, i)
+                        if guid not in seen_guids:
+                            seen_guids.add(guid)
+                            folders.append({
+                                "guid": guid, "name": "", "target": "",
+                                "comment": "", "icon": "", "location": location_name,
+                                "sort_order": 60, "subtitle": "",
+                            })
+                        i += 1
+                    except OSError:
+                        break
+        except FileNotFoundError:
+            pass
+
+    # 从 CLSID 读取详细信息
     for f in folders:
-        g, base = f["guid"], f"{KEY_CLSID}\\{f['guid']}"
-        # 读名称
+        base = f"{KEY_CLSID}\\{f['guid']}"
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, base, 0, winreg.KEY_READ) as k:
                 try: f["name"] = winreg.QueryValueEx(k, "")[0] or ""
                 except: pass
                 try: f["comment"] = winreg.QueryValueEx(k, "InfoTip")[0] or ""
                 except: pass
+                try: f["subtitle"] = winreg.QueryValueEx(k, "System.ItemAuthors")[0] or ""
+                except: pass
+                try: f["sort_order"] = winreg.QueryValueEx(k, "SortOrderIndex")[0] or 60
+                except: pass
         except: pass
+
         # 读目标路径
         try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, f"{base}\\Instance\\InitPropertyBag", 0, winreg.KEY_READ) as k:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                f"{base}\\Instance\\InitPropertyBag", 0, winreg.KEY_READ) as k:
                 f["target"] = winreg.QueryValueEx(k, "TargetFolderPath")[0] or ""
         except: pass
+
         # 读图标
         try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, f"{base}\\DefaultIcon", 0, winreg.KEY_READ) as k:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                f"{base}\\DefaultIcon", 0, winreg.KEY_READ) as k:
                 f["icon"] = winreg.QueryValueEx(k, "")[0] or ""
         except: pass
 
@@ -184,6 +253,7 @@ def main():
     """启动 PySide6 GUI"""
     from AddVirtualDisk_ui import main as gui_main
     gui_main()
+
 
 if __name__ == "__main__":
     main()
