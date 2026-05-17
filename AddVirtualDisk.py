@@ -30,6 +30,25 @@ def create_key(parent_path: str, sub_name: str):
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, parent_path, 0, winreg.KEY_WRITE) as key:
         winreg.CreateKey(key, sub_name)
 
+def ensure_key(full_path: str):
+    """递归创建注册表键（确保路径存在）"""
+    parts = full_path.split("\\")
+    for i in range(1, len(parts) + 1):
+        sub = "\\".join(parts[:i])
+        parent = "\\".join(parts[:i-1]) if i > 1 else ""
+        if parent:
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, parent, 0, winreg.KEY_WRITE) as k:
+                    winreg.CreateKey(k, parts[i-1])
+            except:
+                pass
+        else:
+            try:
+                winreg.CreateKey(winreg.HKEY_CURRENT_USER, sub)
+            except:
+                pass
+
+
 def set_sz(key_path: str, value_name: str, value: str):
     """设置 REG_SZ 字符串值"""
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_WRITE) as key:
@@ -91,20 +110,27 @@ def add_virtual_folder(
     if not guid:
         guid = generate_guid()
 
+    # 归一化路径：Qt 文件对话框返回 /，注册表需要 \
+    target_path = target_path.replace("/", "\\")
+    if icon_path:
+        icon_path = icon_path.replace("/", "\\")
+
     # === 构建注册表路径 ===
+
     ns_path  = LOCATIONS.get(location, LOCATIONS["此电脑"])
     base     = f"{KEY_CLSID}\\{guid}"
     ip       = f"{base}\\Instance"
     ipb      = f"{ip}\\InitPropertyBag"
     di       = f"{base}\\DefaultIcon"
     ips      = f"{base}\\InProcServer32"
+    soc      = f"{base}\\Shell\\Open\\Command"
     sf       = f"{base}\\ShellFolder"
     ns       = f"{ns_path}\\{guid}"
+
 
     # 1. CLSID 主键
     create_key(KEY_CLSID, guid)
     set_sz(base, "", display_name)
-    set_sz(base, "DefaultValue", display_name)
 
     # 2. 排序索引
     set_dword(base, "SortOrderIndex", sort_order)
@@ -114,7 +140,6 @@ def add_virtual_folder(
         set_sz(base, "TileInfo", "prop:System.ItemAuthors")
         set_sz(base, "System.ItemAuthors", subtitle)
     else:
-        # 清除已有的副标题设置（如果之前有的话）
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, base, 0, winreg.KEY_WRITE) as k:
                 try: winreg.DeleteValue(k, "TileInfo")
@@ -140,32 +165,40 @@ def add_virtual_folder(
     else:
         set_expand_sz(di, "", r"%systemroot%\system32\imageres.dll,-3")
 
-    # 6. InProcServer32
+    # 6. InProcServer32（使用 shdocvw.dll，跟百度网盘一致）
     create_key(base, "InProcServer32")
-    set_expand_sz(ips, "", r"%systemroot%\system32\shell32.dll")
-    set_sz(ips, "ThreadingModel", "Both")
+    set_expand_sz(ips, "", r"%systemroot%\system32\shdocvw.dll")
+    set_sz(ips, "ThreadingModel", "Apartment")
 
-    # 7. Instance（使用文件夹 CLSID 实现双击跳转）
+    # 7. Instance（命名空间扩展 CLSID）
     create_key(base, "Instance")
     set_sz(ip, "", "")
-    set_sz(ip, "CLSID", "{00021400-0000-0000-C000-000000000046}")
+    set_sz(ip, "CLSID", SHELLFOLDER_CLSID)
 
     # 8. InitPropertyBag
     create_key(ip, "InitPropertyBag")
     set_sz(ipb, "TargetFolderPath", target_path)
     set_dword(ipb, "Attributes", 0x00000011)
 
-    # 9. ShellFolder（可导航文件夹属性）
+    # 9. Shell\Open\Command（双击执行 explorer.exe 打开目标目录）
+    create_key(base, "Shell")
+    create_key(f"{base}\\Shell", "Open")
+    create_key(f"{base}\\Shell\\Open", "Command")
+
+    set_expand_sz(soc, "", r'%SystemRoot%\explorer.exe /e,"' + target_path + r'"')
+
+
+
+    # 10. ShellFolder
     create_key(base, "ShellFolder")
     set_dword(sf, "Attributes", 0xF080004D)
-    set_dword(sf, "FolderValueFlags", 0x00000000)
 
-
-    # 10. 添加到指定位置的 NameSpace
+    # 11. 添加到指定位置的 NameSpace
     create_key(ns_path, guid)
     set_sz(ns, "", display_name)
 
     return guid
+
 
 
 def remove_virtual_folder(guid: str) -> bool:

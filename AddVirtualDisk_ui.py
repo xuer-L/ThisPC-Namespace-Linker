@@ -8,7 +8,16 @@ ThisPC‑Namespace‑Linker - PySide6 GUI
 import sys, os
 from typing import Optional, Dict, Any
 
+def _resource_path(relative_path: str) -> str:
+    """获取资源文件路径，兼容开发环境和 PyInstaller 打包的 exe"""
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(__file__)
+    return os.path.join(base, relative_path)
+
 from PySide6.QtWidgets import (
+
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QFormLayout, QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QLabel, QMessageBox, QDialog, QLineEdit, QFileDialog,
@@ -197,7 +206,8 @@ class AboutDialog(QDialog):
         layout.setContentsMargins(24, 20, 24, 20)
 
         # Logo
-        logo_path = os.path.join(os.path.dirname(__file__), "logo.ico")
+        logo_path = _resource_path("logo.ico")
+
         if os.path.exists(logo_path):
             logo_label = QLabel()
             logo_pix = QIcon(logo_path).pixmap(64, 64)
@@ -307,7 +317,8 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         # 设置窗口图标
-        logo_path = os.path.join(os.path.dirname(__file__), "logo.ico")
+        logo_path = _resource_path("logo.ico")
+
         if os.path.exists(logo_path):
             self.setWindowIcon(QIcon(logo_path))
 
@@ -323,8 +334,9 @@ class MainWindow(QMainWindow):
         btn_bar.setSpacing(6)
 
         self.add_btn = QPushButton(self.T("add"))
-        self.add_btn.clicked.connect(self.show_add_dialog)
+        self.add_btn.clicked.connect(lambda: self.show_add_dialog())
         btn_bar.addWidget(self.add_btn)
+
 
         self.edit_btn = QPushButton(self.T("edit"))
         self.edit_btn.clicked.connect(self.edit_selected)

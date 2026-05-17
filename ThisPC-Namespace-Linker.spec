@@ -5,7 +5,8 @@ a = Analysis(
     ['AddVirtualDisk.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('logo.ico', '.')],
+
     hiddenimports=['i18n', 'AddVirtualDisk_ui'],
     hookspath=[],
     hooksconfig={},
