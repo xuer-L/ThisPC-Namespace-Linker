@@ -145,20 +145,21 @@ def add_virtual_folder(
     set_expand_sz(ips, "", r"%systemroot%\system32\shell32.dll")
     set_sz(ips, "ThreadingModel", "Both")
 
-    # 7. Instance
+    # 7. Instance（使用文件夹 CLSID 实现双击跳转）
     create_key(base, "Instance")
     set_sz(ip, "", "")
-    set_sz(ip, "CLSID", SHELLFOLDER_CLSID)
+    set_sz(ip, "CLSID", "{00021400-0000-0000-C000-000000000046}")
 
     # 8. InitPropertyBag
     create_key(ip, "InitPropertyBag")
     set_sz(ipb, "TargetFolderPath", target_path)
     set_dword(ipb, "Attributes", 0x00000011)
 
-    # 9. ShellFolder
+    # 9. ShellFolder（可导航文件夹属性）
     create_key(base, "ShellFolder")
-    set_dword(sf, "Attributes", 0x00000011)
+    set_dword(sf, "Attributes", 0xF080004D)
     set_dword(sf, "FolderValueFlags", 0x00000000)
+
 
     # 10. 添加到指定位置的 NameSpace
     create_key(ns_path, guid)

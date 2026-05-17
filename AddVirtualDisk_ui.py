@@ -196,12 +196,22 @@ class AboutDialog(QDialog):
         layout.setSpacing(10)
         layout.setContentsMargins(24, 20, 24, 20)
 
+        # Logo
+        logo_path = os.path.join(os.path.dirname(__file__), "logo.ico")
+        if os.path.exists(logo_path):
+            logo_label = QLabel()
+            logo_pix = QIcon(logo_path).pixmap(64, 64)
+            logo_label.setPixmap(logo_pix)
+            logo_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(logo_label)
+
         # 软件名称
         name_label = QLabel(T("app_name"))
         name_font = QFont("Microsoft YaHei", 18, QFont.Bold)
         name_label.setFont(name_font)
         name_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(name_label)
+
 
         # 版本号
         ver_label = QLabel(f"Version: {VERSION}")
@@ -241,18 +251,23 @@ class AboutDialog(QDialog):
         line3.setStyleSheet("background: #ddd;")
         layout.addWidget(line3)
 
-        # 隐私声明 + 超链接博客
-        privacy = QLabel(
-            T("privacy") + "\n\n"
+        # 隐私声明
+        privacy = QLabel(T("privacy"))
+        privacy.setAlignment(Qt.AlignCenter)
+        privacy.setStyleSheet("color: #666; font-size: 12px;")
+        layout.addWidget(privacy)
+
+        # 博客超链接（独立行）
+        blog_label = QLabel(
             '<a href="https://xuer.space" style="color: #0078d4; text-decoration: none;">'
             + T("blog") + "</a>"
         )
-        privacy.setAlignment(Qt.AlignCenter)
-        privacy.setTextFormat(Qt.RichText)     # <-- 关键！修复超链接显示为代码的问题
-        privacy.setOpenExternalLinks(True)
-        privacy.setStyleSheet("color: #666; font-size: 12px;")
-        privacy.setWordWrap(True)
-        layout.addWidget(privacy)
+        blog_label.setAlignment(Qt.AlignCenter)
+        blog_label.setTextFormat(Qt.RichText)
+        blog_label.setOpenExternalLinks(True)
+        blog_label.setStyleSheet("color: #666; font-size: 12px;")
+        layout.addWidget(blog_label)
+
 
         layout.addStretch()
 
@@ -291,11 +306,17 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 12, 16, 8)
         layout.setSpacing(10)
 
+        # 设置窗口图标
+        logo_path = os.path.join(os.path.dirname(__file__), "logo.ico")
+        if os.path.exists(logo_path):
+            self.setWindowIcon(QIcon(logo_path))
+
         # 标题
         self.title_label = QLabel("📁 " + self.T("window_title"))
         title_font = QFont("Microsoft YaHei", 14, QFont.Bold)
         self.title_label.setFont(title_font)
         layout.addWidget(self.title_label)
+
 
         # 按钮栏
         btn_bar = QHBoxLayout()
