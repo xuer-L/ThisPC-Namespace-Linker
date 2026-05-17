@@ -27,13 +27,11 @@
 
 ## Screenshots
 
-| Before | After |
-|--------|-------|
-| ![Before](screenshots/中文-主界面示例.png) | ![Effect](screenshots/通用-效果展示.png) |
+![Effect](screenshots/效果展示.png)
 
-![English Main Window](screenshots/eng-main.png)
+![Main Window](screenshots/主界面示例.png)
 
-![English Add Dialog](screenshots/eng-add.png)
+![Add Dialog](screenshots/eng-添加自定义文件夹的界面.png)
 
 ## What is this?
 
@@ -141,9 +139,7 @@ Built by [Xuer](https://xuer.space) · Code with Deepseek
 
 ## 截图
 
-| 效果对比 |
-|----------|
-| ![效果展示](screenshots/通用-效果展示.png) |
+![效果展示](screenshots/效果展示.png)
 
 ![主界面](screenshots/中文-主界面示例.png)
 
