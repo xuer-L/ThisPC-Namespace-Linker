@@ -1,6 +1,6 @@
 """
 ThisPC‑Namespace‑Linker - 在 Windows 资源管理器中添加自定义文件夹图标
-支持此电脑 / 桌面 / 网络位置，支持排序和副标题
+支持此电脑 / 桌面 位置，支持排序和副标题
 """
 
 import sys, os, uuid, winreg, ctypes
@@ -20,7 +20,6 @@ SHELLFOLDER_CLSID = "{0E5AAE11-A475-4c5b-AB00-C66DE400274E}"
 LOCATIONS: Dict[str, str] = {
     "此电脑": r"Software\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace",
     "桌面":   r"Software\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace",
-    "网络":   r"Software\Microsoft\Windows\CurrentVersion\Explorer\Network\NameSpace",
 }
 
 def generate_guid() -> str:
@@ -103,7 +102,7 @@ def add_virtual_folder(
         comment: 鼠标悬停提示
         icon_path: 图标路径，留空用默认
         guid: 指定 GUID，留空自动生成
-        location: 目标位置（此电脑/桌面/网络）
+        location: 目标位置（此电脑/桌面）
         sort_order: 排序索引，越小越靠前
         subtitle: 副标题（显示在名称下方的灰体字）
     """
@@ -194,6 +193,8 @@ def add_virtual_folder(
     set_dword(sf, "Attributes", 0xF080004D)
 
     # 11. 添加到指定位置的 NameSpace
+    # 确保 NameSpace 路径存在（网络位置可能没有此路径）
+    ensure_key(ns_path)
     create_key(ns_path, guid)
     set_sz(ns, "", display_name)
 

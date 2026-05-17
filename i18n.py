@@ -84,7 +84,6 @@ LANGUAGES = {
         # ---- 位置名称 ----
         "loc_this_pc": "此电脑",
         "loc_desktop": "桌面",
-        "loc_network": "网络",
     },
 
     "en": {
@@ -167,7 +166,6 @@ LANGUAGES = {
         # ---- Location Names ----
         "loc_this_pc": "This PC",
         "loc_desktop": "Desktop",
-        "loc_network": "Network",
     },
 }
 
@@ -193,7 +191,6 @@ def get_location_name(lang: str, location_key: str) -> str:
     mapping = {
         "此电脑": "loc_this_pc",
         "桌面": "loc_desktop",
-        "网络": "loc_network",
     }
     key = mapping.get(location_key, location_key)
     return get_text(lang, key)
