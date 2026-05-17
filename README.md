@@ -31,10 +31,9 @@
 |--------|-------|
 | ![Before](screenshots/中文-主界面示例.png) | ![Effect](screenshots/通用-效果展示.png) |
 
-| Chinese interface | English interface |
-|-------------------|-------------------|
-| ![zh-main](screenshots/中文-主界面示例.png) | ![en-main](screenshots/eng-main.png) |
-| ![zh-add](screenshots/中文-添加自定义文件夹的界面.png) | ![en-add](screenshots/eng-add.png) |
+![English Main Window](screenshots/eng-main.png)
+
+![English Add Dialog](screenshots/eng-add.png)
 
 ## What is this?
 
@@ -146,10 +145,9 @@ Built by [Xuer](https://xuer.space) · Code with Deepseek
 |----------|
 | ![效果展示](screenshots/通用-效果展示.png) |
 
-| 中文界面 | English interface |
-|----------|-------------------|
-| ![主界面](screenshots/中文-主界面示例.png) | ![Main](screenshots/eng-main.png) |
-| ![添加](screenshots/中文-添加自定义文件夹的界面.png) | ![Add](screenshots/eng-add.png) |
+![主界面](screenshots/中文-主界面示例.png)
+
+![添加对话框](screenshots/中文-添加自定义文件夹的界面.png)
 
 ## 功能
 
