@@ -25,5 +25,10 @@ dist/
 Thumbs.db
 .DS_Store
 
+# Cline (AI coding assistant)
+.clinerules
+.clinerules-*
+cline/
+
 # Project leftovers
 main.txt
