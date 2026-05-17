@@ -60,7 +60,7 @@ LANGUAGES = {
         "about_title": "关于 ThisPC‑Namespace‑Linker",
         "motto": "好好学习，天天向上",
         "developer": "Developer: Xuer with Deepseek\n"
-                     "©Xuer 2026 禁止商用利用和再分发\n"
+                     "©Xuer 2026 · Licensed under GPL-3.0\n"
                      "E-mail: public@xuer.space",
         "privacy": "您的所有数据保存在本地，Xuer不会利用您的数据",
         "blog": "Xuer`Space: LLT-生活/文学/技术",
@@ -142,7 +142,7 @@ LANGUAGES = {
         "about_title": "About ThisPC‑Namespace‑Linker",
         "motto": "Study hard and make progress every day",
         "developer": "Developer: Xuer with Deepseek\n"
-                     "©Xuer 2026 Commercial use and redistribution prohibited\n"
+                     "©Xuer 2026 · Licensed under GPL-3.0\n"
                      "E-mail: public@xuer.space",
         "privacy": "All your data stays local. Xuer does not collect your data.",
         "blog": "Xuer`Space: LLT-Life/Literature/Tech",
