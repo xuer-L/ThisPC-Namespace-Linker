@@ -34,18 +34,7 @@ def ensure_key(full_path: str):
     parts = full_path.split("\\")
     for i in range(1, len(parts) + 1):
         sub = "\\".join(parts[:i])
-        parent = "\\".join(parts[:i-1]) if i > 1 else ""
-        if parent:
-            try:
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, parent, 0, winreg.KEY_WRITE) as k:
-                    winreg.CreateKey(k, parts[i-1])
-            except:
-                pass
-        else:
-            try:
-                winreg.CreateKey(winreg.HKEY_CURRENT_USER, sub)
-            except:
-                pass
+        winreg.CreateKey(winreg.HKEY_CURRENT_USER, sub)
 
 
 def set_sz(key_path: str, value_name: str, value: str):
@@ -162,11 +151,11 @@ def add_virtual_folder(
     if icon_path:
         set_sz(di, "", icon_path)
     else:
-        set_expand_sz(di, "", r"%systemroot%\system32\imageres.dll,-3")
+        set_expand_sz(di, "", r"%SystemRoot%\system32\imageres.dll,-3")
 
     # 6. InProcServer32（使用 shdocvw.dll，跟百度网盘一致）
     create_key(base, "InProcServer32")
-    set_expand_sz(ips, "", r"%systemroot%\system32\shdocvw.dll")
+    set_expand_sz(ips, "", r"%SystemRoot%\system32\shdocvw.dll")
     set_sz(ips, "ThreadingModel", "Apartment")
 
     # 7. Instance（命名空间扩展 CLSID）
@@ -255,7 +244,7 @@ def list_virtual_folders() -> List[Dict[str, Any]]:
                 except: pass
                 try: f["subtitle"] = winreg.QueryValueEx(k, "System.ItemAuthors")[0] or ""
                 except: pass
-                try: f["sort_order"] = winreg.QueryValueEx(k, "SortOrderIndex")[0] or 60
+                try: f["sort_order"] = winreg.QueryValueEx(k, "SortOrderIndex")[0]
                 except: pass
         except: pass
 

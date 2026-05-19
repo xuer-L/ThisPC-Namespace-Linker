@@ -362,9 +362,9 @@ class MainWindow(QMainWindow):
 
         # ---- 语言切换 ----
         btn_bar.addSpacing(12)
-        lang_label = QLabel(self.T("language"))
-        lang_label.setStyleSheet("font-size: 12px; color: #666;")
-        btn_bar.addWidget(lang_label)
+        self.lang_label = QLabel(self.T("language"))
+        self.lang_label.setStyleSheet("font-size: 12px; color: #666;")
+        btn_bar.addWidget(self.lang_label)
         self.lang_combo = QComboBox()
         self.lang_combo.setFixedWidth(80)
         self.lang_combo.addItem("中文", "zh")
@@ -413,6 +413,14 @@ class MainWindow(QMainWindow):
 
     def _retranslate(self):
         """切换语言时刷新所有文字"""
+        # 记住当前选中的 GUID
+        selected_guid = None
+        sel_rows = self.table.selectionModel().selectedRows()
+        if sel_rows:
+            item = self.table.item(sel_rows[0].row(), 2)
+            if item:
+                selected_guid = item.text()
+
         self.setWindowTitle(self.T("window_title"))
         self.title_label.setText("📁 " + self.T("window_title"))
         self.add_btn.setText(self.T("add"))
@@ -421,10 +429,17 @@ class MainWindow(QMainWindow):
         self.refresh_btn.setText(self.T("refresh"))
         self.refresh_shell_btn.setText(self.T("refresh_shell"))
         self.about_btn.setText(self.T("about"))
-        self.lang_combo.parent().findChildren(QLabel)[-1].setText(self.T("language"))
+        self.lang_label.setText(self.T("language"))
         self._set_table_headers()
         self.status.showMessage(self.T("status_ready"))
         self.refresh_list()
+
+        # 恢复选中状态
+        if selected_guid:
+            for row in range(self.table.rowCount()):
+                if self.table.item(row, 2) and self.table.item(row, 2).text() == selected_guid:
+                    self.table.selectRow(row)
+                    break
 
     # ---- 数据操作 ----
 
@@ -503,15 +518,34 @@ class MainWindow(QMainWindow):
             try:
                 is_edit = edit_data is not None
                 if is_edit:
-                    remove_virtual_folder(edit_data["guid"])
-                    add_virtual_folder(
-                        data["name"], data["target"],
-                        comment=data["comment"], icon_path=data["icon"],
-                        guid=edit_data["guid"],
-                        location=data["location"],
-                        sort_order=data["sort_order"],
-                        subtitle=data["subtitle"],
-                    )
+                    old_guid = edit_data["guid"]
+                    # 先移除旧的注册表条目
+                    remove_virtual_folder(old_guid)
+                    try:
+                        add_virtual_folder(
+                            data["name"], data["target"],
+                            comment=data["comment"], icon_path=data["icon"],
+                            guid=old_guid,
+                            location=data["location"],
+                            sort_order=data["sort_order"],
+                            subtitle=data["subtitle"],
+                        )
+                    except Exception:
+                        # re-add 失败 → 尝试恢复旧数据
+                        try:
+                            add_virtual_folder(
+                                edit_data.get("name", ""),
+                                edit_data.get("target", ""),
+                                comment=edit_data.get("comment", ""),
+                                icon_path=edit_data.get("icon", ""),
+                                guid=old_guid,
+                                location=edit_data.get("location", "此电脑"),
+                                sort_order=edit_data.get("sort_order", 60),
+                                subtitle=edit_data.get("subtitle", ""),
+                            )
+                        except Exception:
+                            pass
+                        raise
                     self.status.showMessage(self.T("status_updated", name=data["name"]))
                 else:
                     guid = add_virtual_folder(
