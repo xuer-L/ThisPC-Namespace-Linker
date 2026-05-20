@@ -475,7 +475,7 @@ class MainWindow(QMainWindow):
         self.refresh_shell_btn.clicked.connect(self._refresh_shell)
         btn_bar.addWidget(self.refresh_shell_btn)
 
-        self.drive_btn = QPushButton("\U0001f4bf " + self.T("drive_mapper"))
+        self.drive_btn = QPushButton(self.T("drive_mapper"))
         self.drive_btn.clicked.connect(self.show_drive_mapper)
         btn_bar.addWidget(self.drive_btn)
 
@@ -552,6 +552,7 @@ class MainWindow(QMainWindow):
         self.refresh_btn.setText(self.T("refresh"))
         self.refresh_shell_btn.setText(self.T("refresh_shell"))
         self.about_btn.setText(self.T("about"))
+        self.drive_btn.setText(self.T("drive_mapper"))
         self.lang_label.setText(self.T("language"))
         self._set_table_headers()
         self.status.showMessage(self.T("status_ready"))
