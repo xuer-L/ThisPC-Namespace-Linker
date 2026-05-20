@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QFormLayout, QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QLabel, QMessageBox, QDialog, QLineEdit, QFileDialog,
     QStatusBar, QAbstractItemView, QStyleFactory, QComboBox, QSpinBox,
+    QInputDialog,
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QFont, QIcon, QDesktopServices
@@ -30,6 +31,8 @@ from PySide6.QtCore import QUrl
 from AddVirtualDisk import (
     add_virtual_folder, remove_virtual_folder,
     list_virtual_folders, refresh_explorer, LOCATIONS, VERSION,
+    get_available_drive_letters, add_virtual_drive,
+    remove_virtual_drive, list_virtual_drives,
 )
 from i18n import get_text, get_location_name, DEFAULT_LANG
 
@@ -293,6 +296,122 @@ class AboutDialog(QDialog):
 
 
 # ============================================================
+# 虚拟盘符对话框
+# ============================================================
+
+class DriveMapperDialog(QDialog):
+    """管理 subst 虚拟盘符的对话框"""
+    def __init__(self, parent=None, lang: str = DEFAULT_LANG):
+        super().__init__(parent)
+        self.lang = lang
+        self.setWindowTitle(get_text(lang, "drive_mapper"))
+        self.setMinimumSize(520, 380)
+        self._build_ui()
+        self._refresh_list()
+
+    def T(self, key: str, **kwargs) -> str:
+        return get_text(self.lang, key, **kwargs)
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        # 表格
+        self.table = QTableWidget()
+        self.table.setColumnCount(2)
+        self.table.setHorizontalHeaderLabels(
+            ["盘符", "目标路径"] if self.lang == "zh" else ["Drive", "Target Path"]
+        )
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setColumnWidth(0, 80)
+        layout.addWidget(self.table)
+
+        # 按钮栏
+        btn_layout = QHBoxLayout()
+        self.add_btn = QPushButton(self.T("add"))
+        self.add_btn.clicked.connect(self._add_drive)
+        btn_layout.addWidget(self.add_btn)
+
+        self.remove_btn = QPushButton(self.T("delete"))
+        self.remove_btn.clicked.connect(self._remove_drive)
+        btn_layout.addWidget(self.remove_btn)
+
+        btn_layout.addStretch()
+
+        self.close_btn = QPushButton(self.T("confirm"))
+        self.close_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(self.close_btn)
+
+        layout.addLayout(btn_layout)
+
+    def _refresh_list(self):
+        self.table.setRowCount(0)
+        drives = list_virtual_drives()
+        self.table.setRowCount(len(drives))
+        for row, d in enumerate(drives):
+            self.table.setItem(row, 0, QTableWidgetItem(f"{d['letter']}:\\"))
+            self.table.setItem(row, 1, QTableWidgetItem(d['target']))
+
+    def _add_drive(self):
+        letters = get_available_drive_letters()
+        if not letters:
+            QMessageBox.warning(
+                self,
+                "提示" if self.lang == "zh" else "Notice",
+                "没有可用的盘符" if self.lang == "zh" else "No drive letters available",
+            )
+            return
+
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "选择目标文件夹" if self.lang == "zh" else "Select target folder",
+        )
+        if not path:
+            return
+
+        items = [f"{l}:\\" for l in letters]
+        letter_item, ok = QInputDialog.getItem(
+            self,
+            "选择盘符" if self.lang == "zh" else "Select Drive Letter",
+            "盘符:" if self.lang == "zh" else "Drive:",
+            items, 0, False,
+        )
+        if not ok:
+            return
+        letter = letter_item.rstrip(":\\")
+
+        try:
+            add_virtual_drive(path, letter)
+            self._refresh_list()
+        except Exception as e:
+            QMessageBox.critical(self, self.T("op_failed"), str(e))
+
+    def _remove_drive(self):
+        rows = self.table.selectionModel().selectedRows()
+        if not rows:
+            QMessageBox.warning(self, self.T("op_failed"), self.T("select_hint"))
+            return
+        letter = self.table.item(rows[0].row(), 0).text().rstrip(":\\")
+        name = f"{letter}:\\"
+        reply = QMessageBox.question(
+            self, self.T("op_failed"),
+            f"确定要取消映射 {name}?" if self.lang == "zh" else f"Remove mapping {name}?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        try:
+            remove_virtual_drive(letter)
+            self._refresh_list()
+        except Exception as e:
+            QMessageBox.critical(self, self.T("op_failed"), str(e))
+
+
+# ============================================================
 # 主窗口
 # ============================================================
 
@@ -355,6 +474,10 @@ class MainWindow(QMainWindow):
         self.refresh_shell_btn = QPushButton(self.T("refresh_shell"))
         self.refresh_shell_btn.clicked.connect(self._refresh_shell)
         btn_bar.addWidget(self.refresh_shell_btn)
+
+        self.drive_btn = QPushButton("\U0001f4bf " + self.T("drive_mapper"))
+        self.drive_btn.clicked.connect(self.show_drive_mapper)
+        btn_bar.addWidget(self.drive_btn)
 
         self.about_btn = QPushButton(self.T("about"))
         self.about_btn.clicked.connect(self.show_about_dialog)
@@ -481,6 +604,10 @@ class MainWindow(QMainWindow):
 
     def show_about_dialog(self):
         dlg = AboutDialog(self, self.current_lang)
+        dlg.exec()
+
+    def show_drive_mapper(self):
+        dlg = DriveMapperDialog(self, self.current_lang)
         dlg.exec()
 
     def _get_selected_row(self) -> int:

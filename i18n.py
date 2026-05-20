@@ -84,6 +84,9 @@ LANGUAGES = {
         # ---- 位置名称 ----
         "loc_this_pc": "此电脑",
         "loc_desktop": "桌面",
+
+        # ---- 虚拟盘符 ----
+        "drive_mapper": "\U0001f4bf 映射盘符",
     },
 
     "en": {
@@ -166,6 +169,9 @@ LANGUAGES = {
         # ---- Location Names ----
         "loc_this_pc": "This PC",
         "loc_desktop": "Desktop",
+
+        # ---- Virtual Drive ----
+        "drive_mapper": "\U0001f4bf Map as Drive",
     },
 }
 

@@ -3,7 +3,7 @@ ThisPC‑Namespace‑Linker - 在 Windows 资源管理器中添加自定义文�
 支持此电脑 / 桌面 位置，支持排序和副标题
 """
 
-import sys, os, uuid, winreg, ctypes
+import sys, os, uuid, winreg, ctypes, subprocess
 
 from typing import Optional, Dict, List, Any
 
@@ -271,6 +271,84 @@ def refresh_explorer():
         ctypes.windll.shell32.SHChangeNotify(0x08000000, 0, None, None)
     except Exception:
         pass
+
+
+# ============ subst 虚拟盘符 ============
+
+def get_available_drive_letters() -> List[str]:
+    """获取当前可用的盘符列表（Z→E 倒序，跳过 C/D 和已占用的）"""
+    used = set()
+    for l in range(ord('A'), ord('Z') + 1):
+        if os.path.exists(f"{chr(l)}:\\"):
+            used.add(chr(l))
+    # 检查 subst 已占用的
+    try:
+        r = subprocess.run(["subst"], capture_output=True, text=True)
+        for line in r.stdout.splitlines():
+            if "=>" in line:
+                letter = line.split(":")[0].strip()
+                used.add(letter.upper())
+    except FileNotFoundError:
+        pass  # subst 不可用（非 Windows）
+    available = []
+    for l in range(ord('Z'), ord('D'), -1):
+        if chr(l) not in used:
+            available.append(chr(l))
+    return available
+
+
+def add_virtual_drive(target_path: str, drive_letter: str = "") -> str:
+    """
+    用 subst 把文件夹映射为一个虚拟盘符。
+    返回实际使用的盘符字母。
+    """
+    target_path = target_path.replace("/", "\\")
+    if not os.path.isdir(target_path):
+        raise NotADirectoryError(f"目标路径不存在或不是文件夹: {target_path}")
+
+    if drive_letter:
+        drive_letter = drive_letter.upper().rstrip(":")
+        if os.path.exists(f"{drive_letter}:\\"):
+            raise RuntimeError(f"盘符 {drive_letter}: 已被占用")
+    else:
+        avail = get_available_drive_letters()
+        if not avail:
+            raise RuntimeError("没有可用的盘符")
+        drive_letter = avail[0]
+
+    result = subprocess.run(
+        ["subst", f"{drive_letter}:", target_path],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"subst 失败: {result.stderr.strip() or result.stdout.strip()}")
+
+    return drive_letter
+
+
+def remove_virtual_drive(drive_letter: str):
+    """取消 subst 虚拟盘符映射"""
+    drive_letter = drive_letter.upper().rstrip(":")
+    subprocess.run(["subst", f"{drive_letter}:", "/D"], capture_output=True)
+
+
+def list_virtual_drives() -> List[Dict[str, str]]:
+    """列出当前所有 subst 虚拟盘符映射"""
+    result = subprocess.run(["subst"], capture_output=True, text=True)
+    drives: List[Dict[str, str]] = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line or "=>" not in line:
+            continue
+        # 格式: "X:\: => D:\TargetFolder"
+        try:
+            letter = line.split(":")[0].strip()
+            arrow_idx = line.index("=>")
+            target = line[arrow_idx + 2:].strip().strip("\\")
+            drives.append({"letter": letter.upper(), "target": target})
+        except (ValueError, IndexError):
+            pass
+    return drives
 
 
 def main():
