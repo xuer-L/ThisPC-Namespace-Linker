@@ -30,5 +30,11 @@ Thumbs.db
 .clinerules-*
 cline/
 
+# Secrets / local env (never commit tokens or keys)
+.env
+.env.*
+*.env
+local.env
+
 # Project leftovers
 main.txt
