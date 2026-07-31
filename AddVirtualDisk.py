@@ -8,7 +8,7 @@ import sys, os, uuid, winreg, ctypes, subprocess
 from typing import Optional, Dict, List, Any
 
 # ============ 版本信息 ============
-__version__ = "1.0.0"
+__version__ = "1.2.0"
 VERSION = __version__
 
 
