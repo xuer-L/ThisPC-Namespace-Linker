@@ -674,7 +674,6 @@ class MainWindow(QMainWindow):
                         except Exception:
                             pass
                         raise
-                    self.status.showMessage(self.T("status_updated", name=data["name"]))
                 else:
                     guid = add_virtual_folder(
                         data["name"], data["target"],
@@ -683,10 +682,14 @@ class MainWindow(QMainWindow):
                         sort_order=data["sort_order"],
                         subtitle=data["subtitle"],
                     )
-                    loc_display = get_location_name(self.current_lang, data["location"])
-                    self.status.showMessage(self.T("status_added", name=data["name"], location=loc_display, guid=guid))
                 refresh_explorer()
                 self.refresh_list()
+                # 成功消息必须在 refresh_list 之后设置，否则会被 "共 N 个自定义项" 覆盖
+                if is_edit:
+                    self.status.showMessage(self.T("status_updated", name=data["name"]))
+                else:
+                    loc_display = get_location_name(self.current_lang, data["location"])
+                    self.status.showMessage(self.T("status_added", name=data["name"], location=loc_display, guid=guid))
             except Exception as e:
                 QMessageBox.critical(self, self.T("op_failed"), str(e))
 

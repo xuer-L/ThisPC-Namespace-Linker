@@ -173,7 +173,9 @@ def add_virtual_folder(
     create_key(f"{base}\\Shell", "Open")
     create_key(f"{base}\\Shell\\Open", "Command")
 
-    set_expand_sz(soc, "", r'%SystemRoot%\explorer.exe /e,"' + target_path + r'"')
+    # 去除尾部反斜杠，避免 "D:\" 变成 explorer 参数里的转义引号 "\""
+    open_target = target_path.rstrip("\\")
+    set_expand_sz(soc, "", r'%SystemRoot%\explorer.exe /e,"' + open_target + r'"')
 
 
 
@@ -344,7 +346,8 @@ def list_virtual_drives() -> List[Dict[str, str]]:
         try:
             letter = line.split(":")[0].strip()
             arrow_idx = line.index("=>")
-            target = line[arrow_idx + 2:].strip().strip("\\")
+            # 只去尾部反斜杠，避免 strip("\\") 剥掉 UNC 路径前缀 "\\server\share"
+            target = line[arrow_idx + 2:].strip().rstrip("\\")
             drives.append({"letter": letter.upper(), "target": target})
         except (ValueError, IndexError):
             pass
